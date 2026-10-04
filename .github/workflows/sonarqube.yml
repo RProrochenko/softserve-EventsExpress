@@ -1,0 +1,40 @@
+name: SonarQube
+
+on:
+  push:
+    branches: [ development ]
+  workflow_dispatch:
+
+concurrency:
+  group: sonarqube-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  sonarqube:
+    name: SonarQube analysis
+    runs-on: [ self-hosted, linux ]
+    timeout-minutes: 45
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add .NET tools to PATH
+        run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Begin analysis
+        run: |
+          dotnet sonarscanner begin /k:"softserve-eventsexpress" /n:"softserve-EventsExpress" \
+            /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.exclusions="**/node_modules/**"
+
+      # NuGetAudit вимкнено: старі пакети мають відомі вразливості,
+      # і restore інакше падає з Warning As Error. Самі вразливості не виправлені.
+      - name: Build
+        run: dotnet build EventsExpress.sln -c Release -p:NuGetAudit=false -p:TreatWarningsAsErrors=false
+
+      - name: End analysis
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
